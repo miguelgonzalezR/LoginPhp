@@ -63,4 +63,68 @@ class Usuario extends DB {
         return $stmt->execute([$id]);
     }
 
+
+    public function existsEmail($email) {
+        // Asegúrate de que la conexión a la base de datos esté establecida
+        $conn = $this->connect();
+        
+        // Prepara una declaración SQL para evitar inyecciones SQL
+        $stmt = $conn->prepare("SELECT COUNT(*) FROM users WHERE correo = ?");
+        
+        // Ejecuta la declaración con el email proporcionado
+        $stmt->execute([$email]);
+        
+        // Recupera el resultado de la consulta
+        $count = $stmt->fetchColumn();
+        
+        // Retorna true si hay al menos un registro con ese email
+        return $count > 0;
+    }
+
+
+    public function storeToken($email, $token) {
+        $conn = $this->connect();
+        
+        // Calcula la fecha/hora de expiración del token, p. ej., 24 horas desde ahora
+        $expiration = new DateTime(); // Fecha y hora actual
+        $expiration->add(new DateInterval('PT24H')); // Añade 24 horas
+        
+        // Prepara una declaración SQL para actualizar el token y la expiración
+        $stmt = $conn->prepare("UPDATE users SET password_reset_token = ?, token_expiration = ? WHERE correo = ?");
+        
+        // Ejecuta la declaración con el token, la expiración y el email
+        return $stmt->execute([$token, $expiration->format('Y-m-d H:i:s'), $email]);
+    }
+
+    public function isValidToken($token) {
+        $conn = $this->connect();
+
+        // Prepara una declaración SQL para verificar el token y su expiración
+        $stmt = $conn->prepare("SELECT COUNT(*) FROM users WHERE password_reset_token = ? AND token_expiration > NOW()");
+        $stmt->execute([$token]);
+
+        // Recupera el resultado de la consulta
+        $count = $stmt->fetchColumn();
+
+        // Retorna true si el token es válido (existe y no ha expirado)
+        return $count > 0;
+    }
+
+    public function updatePassword($token, $newPassword) {
+        $conn = $this->connect();
+
+        // Hashear la nueva contraseña
+        $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
+
+        // Prepara una declaración SQL para actualizar la contraseña del usuario
+        $stmt = $conn->prepare("UPDATE users SET password = ?, password_reset_token = NULL, token_expiration = NULL WHERE password_reset_token = ?");
+
+        // Ejecuta la declaración con la nueva contraseña hasheada y el token
+        $success = $stmt->execute([$hashedPassword, $token]);
+
+        // Retorna true si la contraseña fue actualizada correctamente
+        return $success;
+    }
+
+
 }
